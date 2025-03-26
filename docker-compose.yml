@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-net
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    restart: always
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9093
+      KAFKA_LOG_RETENTION_HOURS: 3 # Messages retained for 3 hours
+      KAFKA_LOG_RETENTION_BYTES: 1073741824 # 1GB retention per topic
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-net
+
+  kafka-init:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Wait for Kafka to be ready
+        sleep 10
+        # Create topics
+        kafka-topics --create --topic sensor-data --bootstrap-server kafka:9093 --partitions 1 --replication-factor 1
+        kafka-topics --create --topic processed-data --bootstrap-server kafka:9093 --partitions 1 --replication-factor 1
+        kafka-topics --create --topic alerts --bootstrap-server kafka:9093 --partitions 1 --replication-factor 1
+    networks:
+      - kafka-net
+
+volumes:
+  kafka-data:
+
+networks:
+  kafka-net:
